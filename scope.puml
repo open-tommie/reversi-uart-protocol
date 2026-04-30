@@ -20,8 +20,8 @@ rectangle "PC 側（範囲外・実装自由）" as server <<PC>> {
 }
 
 rectangle "本書が規定する範囲\nUART プロトコル" as scope <<scope>> {
-  rectangle "アプリケーション層\n（メッセージ書式：SB/SW/MOd?/PS/BO.../EB/EW/ED/VE/PI）" as app
-  rectangle "リンク層\n（ボーレート 8N1 / LF 送信・CR/LF/CRLF 受信）" as link
+  rectangle "アプリケーション層\n（メッセージ書式：SB/SW/MOd?/PA/BO.../EB/EW/ED/VE/PI\nCRLF 行終端）" as app
+  rectangle "リンク層\n（ボーレート / 8N1 / フロー制御なし）" as link
 }
 
 rectangle "物理層（範囲外・CPU 製作者の領分）" as phy <<phy>> {
@@ -30,7 +30,7 @@ rectangle "物理層（範囲外・CPU 製作者の領分）" as phy <<phy>> {
 }
 
 rectangle "CPU 側（範囲外・実装自由）" as cpu <<cpu>> {
-  rectangle "自作 CPU\n（FPGA / MCU / ディスクリート / レッドストーン / etc.)" as mycpu <<out>>
+  rectangle "自作 CPU\n（FPGA / MCU / ディスクリート / etc.)" as mycpu <<out>>
 }
 
 server -down-> scope
