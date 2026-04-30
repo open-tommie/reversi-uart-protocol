@@ -3,6 +3,7 @@ title 参考：自作 CPU 用のテスト環境構成例
 
 skinparam shadowing false
 skinparam componentStyle rectangle
+hide <<plain>> stereotype
 
 skinparam rectangle {
     BackgroundColor<<cpu>> #FFF3E0
@@ -13,6 +14,9 @@ skinparam rectangle {
     BorderColor<<pc>> #1565C0
     BackgroundColor<<tool>> #F1F8E9
     BorderColor<<tool>> #558B2F
+    BackgroundColor<<plain>> transparent
+    BorderColor<<plain>> transparent
+    Shadowing<<plain>> false
 }
 
 rectangle "自作 CPU\n(FPGA / MCU / ディスクリート / etc.)" as cpu <<cpu>>
@@ -21,11 +25,14 @@ rectangle "USB-UART 変換器\n(CP210x / CH340 / FTDI 等)" as bridge <<bridge>>
 
 rectangle "PC (Windows / Mac / Linux)" as pc <<pc>> {
   rectangle "シリアル端末\n(VSCode Serial Monitor /\n TeraTerm / minicom)" as term <<tool>>
-  rectangle "Python pyserial\n対局スクリプト\n(本仕様の行を自動送信・応答)" as pyser <<tool>>
+  rectangle "シリアル送受信\n対局プログラム" as pyser <<tool>>
 }
 
-cpu -right-> bridge : UART\n(TX/RX/GND\n9600 8N1)
+cpu -right-> bridge : UART
 bridge -right-> pc : USB
+
+rectangle "<latex>\phantom{XXXXXXXXXXXXXXXXXX}\underbrace{\phantom{XXXXXXXXXXXXXXXXXXXXXXXXX}}_{\textcolor{red}{\textbf{\Large 本書規定の UART プロトコル}}}</latex>" as proto <<plain>>
+bridge -[hidden]down- proto
 
 note bottom of term
   手打ちで "SB", "MOd3", "PI" 等を
