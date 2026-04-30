@@ -21,7 +21,7 @@ rectangle "USB-UART 変換器\n(CP210x / CH340 / FTDI 等)" as bridge <<bridge>>
 
 rectangle "PC (Windows / Mac / Linux)" as pc <<pc>> {
   rectangle "シリアル端末\n(VSCode Serial Monitor /\n TeraTerm / minicom)" as term <<tool>>
-  rectangle "Python pyserial\n疑似サーバー\n(本仕様の行を自動送信・応答)" as pyser <<tool>>
+  rectangle "Python pyserial\n対局スクリプト\n(本仕様の行を自動送信・応答)" as pyser <<tool>>
 }
 
 cpu -right-> bridge : UART\n(TX/RX/GND\n9600 8N1)

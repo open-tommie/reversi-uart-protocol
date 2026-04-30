@@ -4,7 +4,7 @@
 
 作成者: [tommie.jp](https://tommie.jp)
 
-NBoard Protocol の概要と、tommieChat への応用可能性のメモ。
+NBoard Protocol の概要メモ。
 [README.md](README.md) の設計検討時の比較対象として
 調査した内容を記録する。
 
@@ -19,7 +19,6 @@ NBoard Protocol の概要と、tommieChat への応用可能性のメモ。
 - [4. 主な応答（エンジン → ホスト）](#4-主な応答エンジン--ホスト)
 - [5. 本書 UART プロトコルとの比較](#5-本書-uart-プロトコルとの比較)
 - [6. CPU 対戦への使えるか](#6-cpu-対戦への使えるか)
-- [7. tommieChat への具体応用](#7-tommiechat-への具体応用)
 
 ## 1. NBoard Protocol とは
 
@@ -78,30 +77,15 @@ Zebra など主要なエンジンはほぼ全て NBoard Protocol を喋れる。
 
 用途次第:
 
-- ✅ **ソフトウェア CPU（Edax など既製エンジン）を tommieChat に繋ぎたい**
+- ✅ **ソフトウェア CPU（Edax など既製エンジン）を PC 上で繋ぎたい**
   → NBoard Protocol で接続するのが最短。エンジンをサブプロセス起動して
   stdin/stdout で会話
 - ❌ **自作 FPGA / MCU を UART 経由で繋ぎたい**
   → NBoard Protocol は stdin/stdout 前提で物理シリアルを想定していない。
   [本書 UART プロトコル](README.md)のほうが適している
 - 🤔 **両方対応したい**
-  → tommieChat サーバー側で「NBoard アダプタ」と「UART アダプタ」の 2 種類を
+  → PC 側で「NBoard アダプタ」と「UART アダプタ」の 2 種類を
   用意し、どちらも同じ内部インターフェースに揃える設計がクリーン
-
-## 7. tommieChat への具体応用
-
-もし既製の強い CPU（Edax など）を tommieChat に入れたい場合:
-
-1. Nakama サーバー上で Edax を subprocess 起動
-2. NBoard Protocol で `set game <GGF>` → `go` → `=== <mv>` のループ
-3. 受け取った着手を通常の対局メッセージとしてクライアントに broadcast
-
-自作 CPU 枠（本書プロトコル）と既製強豪 CPU 枠（NBoard Protocol）を両方持つと、
-
-- 「初心者向け自作 CPU 大会」
-- 「強豪 AI による対局解析 / 指導モード」
-
-を同じシステムで提供できる。
 
 ## 参考資料
 

@@ -6,7 +6,7 @@ skinparam rankdir TB
 skinparam ArrowColor black
 
 skinparam rectangle {
-    BackgroundColor<<server>> #F5F5F5
+    BackgroundColor<<PC>> #F5F5F5
     BackgroundColor<<scope>> #FFCDD2
     BorderColor<<scope>> #C62828
     BorderThickness<<scope>> 2
@@ -15,8 +15,7 @@ skinparam rectangle {
     BackgroundColor<<out>> #E0E0E0
 }
 
-rectangle "サーバー側（範囲外・実装自由）" as server <<server>> {
-  rectangle "ネット通信 / ゲームロジック" as srv_game <<out>>
+rectangle "PC 側（範囲外・実装自由）" as server <<PC>> {
   rectangle "シリアル送受信" as srv_ser <<out>>
 }
 
