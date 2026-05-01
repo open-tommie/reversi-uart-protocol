@@ -1,456 +1,510 @@
-# リバーシ UART プロトコル仕様（ドラフト v0.1）
+# Reversi UART Protocol Specification (Draft v0.1)
 
-2026-04-30
+[English](README.md) | [日本語](README.ja.md)
 
-提案者: [tommie.jp](https://tommie.jp)
+2026-05-02
 
-- リバーシアルゴリズムを実装したCPU(FPGAやディスクリートなど想定)をPCにUART経由で接続し、
-PC上のソフトウェアとシリアル接続するための通信プロトコル仕様。
-- CPU製作者が本書だけを読めばプロトコルを実装可能なように規定する。
+Author: [tommie.jp](https://tommie.jp) ([@tommie-jp](https://github.com/tommie-jp))
 
-> **注記**: 「オセロ」は株式会社メガハウスの登録商標です。本書では「オセロ」の
-> 代わりに一般名詞である「リバーシ」を使用しています。
+- A communication protocol for connecting a CPU that implements a Reversi
+  algorithm (intended for FPGA, discrete logic, etc.) to a PC over UART, so it
+  can talk to PC-side software via serial.
+- The spec is written so that a CPU implementer can build a conforming
+  implementation by reading this document alone.
 
-## 目次
+> **Note**: "Othello" is a registered trademark of MegaHouse Corporation.
+> This document uses the generic term "Reversi" instead.
 
-- [リバーシ UART プロトコル仕様（ドラフト v0.1）](#リバーシ-uart-プロトコル仕様ドラフト-v01)
-  - [目次](#目次)
-  - [1. この文書のステータス](#1-この文書のステータス)
-  - [2. スコープ](#2-スコープ)
-  - [3. テスト環境構成例](#3-テスト環境構成例)
-  - [4. リンク層](#4-リンク層)
-  - [5. 文字コード・改行](#5-文字コード改行)
-    - [5.1 仕様違反受信時の扱い](#51-仕様違反受信時の扱い)
-  - [6. バッファ・タイムアウト](#6-バッファタイムアウト)
-  - [7. メッセージ書式](#7-メッセージ書式)
-    - [7.1 PC → CPU（CPU への入力）](#71-pc--cpucpu-への入力)
-    - [7.2 CPU → PC（CPU からの応答）](#72-cpu--pccpu-からの応答)
-    - [7.3 ER エラーコード表](#73-er-エラーコード表)
-  - [8. 座標・盤面の向き](#8-座標盤面の向き)
-  - [9. プロトコル設計の指針](#9-プロトコル設計の指針)
-  - [10. 正常フロー](#10-正常フロー)
-  - [11. CPU 側 状態遷移図（例）](#11-cpu-側-状態遷移図例)
-  - [12. 状態遷移表](#12-状態遷移表)
-  - [13. 異常系・復帰フロー](#13-異常系復帰フロー)
-    - [13.1 盤面乖離からの復帰（`RS`）](#131-盤面乖離からの復帰rs)
-  - [14. 参考](#14-参考)
-    - [14.1 シリアル端末ソフト設定のヒント](#141-シリアル端末ソフト設定のヒント)
-    - [14.2 設計判断の背景: なぜ「大文字コマンド」「CR+LF のみ」にしたか](#142-設計判断の背景-なぜ大文字コマンドcrlf-のみにしたか)
-      - [大文字コマンド (§5)](#大文字コマンド-5)
-      - [CR+LF のみ (§5)](#crlf-のみ-5)
-      - [トレードオフ](#トレードオフ)
-  - [15. 検討事項（未確定）](#15-検討事項未確定)
-  - [16. 設計レビュー](#16-設計レビュー)
-  - [17. 本書に追記を検討するなら](#17-本書に追記を検討するなら)
+## Table of Contents
 
-## 1. この文書のステータス
+- [Reversi UART Protocol Specification (Draft v0.1)](#reversi-uart-protocol-specification-draft-v01)
+  - [Table of Contents](#table-of-contents)
+  - [1. Document Status](#1-document-status)
+  - [2. Scope](#2-scope)
+  - [3. Test Setup Example](#3-test-setup-example)
+  - [4. Link Layer](#4-link-layer)
+  - [5. Character Set and Line Endings](#5-character-set-and-line-endings)
+    - [5.1 Handling Spec Violations on Receive](#51-handling-spec-violations-on-receive)
+  - [6. Buffers and Timeouts](#6-buffers-and-timeouts)
+  - [7. Message Formats](#7-message-formats)
+    - [7.1 PC → CPU (input to CPU)](#71-pc--cpu-input-to-cpu)
+    - [7.2 CPU → PC (response from CPU)](#72-cpu--pc-response-from-cpu)
+    - [7.3 ER Error Code Table](#73-er-error-code-table)
+  - [8. Coordinates and Board Orientation](#8-coordinates-and-board-orientation)
+  - [9. Protocol Design Guidelines](#9-protocol-design-guidelines)
+  - [10. Normal Flow](#10-normal-flow)
+  - [11. CPU-side State Diagram (example)](#11-cpu-side-state-diagram-example)
+  - [12. State Transition Table](#12-state-transition-table)
+  - [13. Error Handling and Recovery Flow](#13-error-handling-and-recovery-flow)
+    - [13.1 Recovery from Board Divergence (`RS`)](#131-recovery-from-board-divergence-rs)
+  - [14. Reference](#14-reference)
+    - [14.1 Serial Terminal Software Hints](#141-serial-terminal-software-hints)
+    - [14.2 Design Rationale: Why Uppercase Commands and CR+LF Only](#142-design-rationale-why-uppercase-commands-and-crlf-only)
+      - [Uppercase Commands (§5)](#uppercase-commands-5)
+      - [CR+LF Only (§5)](#crlf-only-5)
+      - [Trade-offs](#trade-offs)
+  - [15. Open Issues](#15-open-issues)
+  - [16. Design Review](#16-design-review)
+  - [17. Possible Future Additions](#17-possible-future-additions)
 
-本書は**ドラフト v0.1** です。仕様は確定していません。ご意見・ご指摘を募集しています。
+## 1. Document Status
 
-## 2. スコープ
+This is **Draft v0.1**. The specification is not finalized. Comments and
+feedback are welcome.
 
-本書が規定するのは **UART 上で流れるバイト列**（リンク層以上のアプリケーション
-プロトコル）のみ。
+## 2. Scope
 
-![本書のスコープ](scope.png)
+This document defines only the **byte stream flowing on UART** (the application
+protocol above the link layer).
 
-PlantUML ソース: [scope.puml](scope.puml)
+![Scope of this document](scope.png)
 
-| レイヤ | 規定範囲 | 備考 |
-| ------ | -------- | ---- |
-| アプリケーション（メッセージ書式・状態遷移） | ✅ 本書 | |
-| リンク層（ボーレート・バイト形式） | ✅ 本書 | |
-| 物理層（USB-UART 変換器・電圧レベル・ケーブル・コネクタ） | ❌ 範囲外 | CPU 製作者の領分 |
-| PC 側（端末ソフト等） | ❌ 範囲外 | PC 側の実装依存 |
+PlantUML source: [scope.puml](scope.puml)
 
-**前提**: ホスト側 PC の USB ポートに USB-UART 変換器を挿し、その先の UART 線が
-CPU と接続されている。バイト列が双方向に流れる状態までは物理的に成立している。
+| Layer | Specified | Notes |
+| ----- | --------- | ----- |
+| Application (message format, state machine) | ✅ This doc | |
+| Link (baud rate, byte format) | ✅ This doc | |
+| Physical (USB-UART converter, voltage levels, cables, connectors) | ❌ Out of scope | CPU implementer's domain |
+| PC side (terminal software, etc.) | ❌ Out of scope | PC-side implementation dependent |
 
-## 3. テスト環境構成例
+**Assumption**: a USB-UART converter is plugged into the PC's USB port, and
+its UART lines are wired to the CPU. Bytes flow bidirectionally at the
+physical level.
 
-自作 CPU 用のテスト環境は CPU 製作者が独自に用意してよい。典型的な構成例を下図に示す。
+## 3. Test Setup Example
 
-![テスト環境構成例](test-setup.png)
+CPU implementers may set up their own test environment. A typical configuration
+is shown below.
 
-PlantUML ソース: [test-setup.puml](test-setup.puml)
+![Test setup example](test-setup.png)
 
-- CPU → USB-UART 変換器 → PC の USB ポート、という物理接続を組む
-- PC 側の端末ソフト（VSCode Serial Monitor / TeraTerm / minicom 等）で手動コマンドを
-  投げて挙動確認するのが一般的
-- シリアル送受信対局プログラムの例: Python pyserial を用いてシリアル送受信し、
-  自動応答させて CPU の実装を検証する
+PlantUML source: [test-setup.puml](test-setup.puml)
 
-## 4. リンク層
+- Wire CPU → USB-UART converter → PC USB port as the physical chain
+- Use a serial terminal on the PC (VSCode Serial Monitor / TeraTerm / minicom)
+  to send commands by hand and verify the CPU's response
+- Example serial-IO match program: use Python pyserial to send/receive serial
+  data and auto-respond, verifying the CPU implementation
 
-- **ボーレート**: 9600 / 38400 / 115200 bps などから選択（ホスト側で指定、CPU 側に合わせる）
-- **フレーム**: 8N1（データ 8 bit、パリティなし、ストップ 1 bit）
-- **フロー制御**: なし
-- CPU 製作者は自分の CPU が安定動作する範囲でボーレートを選んでよい
+## 4. Link Layer
 
-## 5. 文字コード・改行
+- **Baud rate**: choose from 9600 / 38400 / 115200 bps, etc. (specified on the
+  PC side, matching the CPU)
+- **Frame**: 8N1 (8 data bits, no parity, 1 stop bit)
+- **Flow control**: none
+- CPU implementers may pick any baud rate within their CPU's stable range
 
-- ASCII（人間がシリアルモニタでデバッグできる）
-- **改行は CR+LF (`\r\n`, 0x0D 0x0A) のみ**。送受信とも厳密に CR+LF。LF 単独 / CR 単独は不許可。
-- **コマンドは大文字のみ**。`VE`, `PI`, `SB`, `MO`, `PA`, `BO`, `EB`, `EW`, `ED`, `PO`, `EN`, `RE`, `ER`, `ST`, `NC`, `RS`, `BS` の各キーワードは英大文字で送受信する。小文字 (`pi` 等) は仕様違反。
-- **MO 等の座標は小文字のみ**（オセロ棋譜の慣習: `MOd3` は OK, `MOD3` は不可）
-  - 列インデックス = `ch - 'a'`、行インデックス = `ch - '1'`
+## 5. Character Set and Line Endings
 
-### 5.1 仕様違反受信時の扱い
+- ASCII (so a human can debug with a serial monitor)
+- **Line ending is CR+LF (`\r\n`, 0x0D 0x0A) only**. Both directions strictly
+  use CR+LF. LF alone or CR alone is not allowed.
+- **Commands are uppercase only**. Each of `VE`, `PI`, `SB`, `MO`, `PA`, `BO`,
+  `EB`, `EW`, `ED`, `PO`, `EN`, `RE`, `ER`, `ST`, `NC`, `RS`, `BS` is sent
+  and received in uppercase. Lowercase (e.g. `pi`) is a spec violation.
+- **Coordinates such as the `MO` argument are lowercase only** (per Othello
+  notational convention: `MOd3` is OK, `MOD3` is not)
+  - Column index = `ch - 'a'`, row index = `ch - '1'`
 
-上記規定に反する受信（小文字コマンド、改行コード違反、未知コマンド等）を受け取ったら、
-ホスト・CPU ともに **`ER<NN>\r\n` で応答する**。`<NN>` は 2 桁エラーコード
-（§7.3 エラーコード表参照、特定不能時は `00` Generic）。送り手は §7.2 #7 の規定通り
-ログに記録するだけで、自動再送は行わない（無限ループ防止）。
+### 5.1 Handling Spec Violations on Receive
 
-FPGA 向け最小実装: 全違反を `ER00\r\n` で返すだけでも仕様適合。
+On receiving a violation (lowercase command, wrong line ending, unknown
+command, etc.), both host and CPU **respond with `ER<NN>\r\n`**. `<NN>` is a
+2-digit error code (see §7.3; use `00` Generic when the cause cannot be
+identified). The sender just logs the failure per §7.2 #7 and does **not**
+auto-retry (to avoid infinite loops).
 
-## 6. バッファ・タイムアウト
+Minimum FPGA implementation: returning `ER00\r\n` for every violation is spec-
+compliant.
 
-| 項目 | 値 | 備考 |
-| ---- | -- | ---- |
-| CPU 側 RX バッファ | **80 バイト以上推奨** | 最長メッセージは `BO` (68 バイト) |
-| 文字間タイムアウト | **100 ms** | 行途中で次文字が 100 ms 来なければパーサをリセットし、次の `\r\n` まで読み飛ばす |
-| `PI`/`PO` ラウンドトリップ | PC 側は 1000 ms 待機、3 連続失敗で切断扱い | CPU 側は受信即応答 |
-| 着手タイムアウト | PC 側で設定可（デフォルト 30 秒） | 超過時は PC 側で警告表示 |
+## 6. Buffers and Timeouts
 
-## 7. メッセージ書式
+| Item | Value | Notes |
+| ---- | ----- | ----- |
+| CPU RX buffer | **80 bytes recommended (or more)** | longest message is `BO` (68 bytes) |
+| Inter-character timeout | **100 ms** | if no next byte arrives within 100 ms mid-line, reset the parser and skip until the next `\r\n` |
+| `PI`/`PO` round trip | PC waits up to 1000 ms; 3 consecutive failures = treat as disconnected | the CPU responds immediately |
+| Move timeout | configurable on PC side (default 30 s) | on timeout the PC shows a warning |
 
-凡例: 必須 = ✔ / 任意 = 空欄
+## 7. Message Formats
 
-### 7.1 PC → CPU（CPU への入力）
+Legend: required = ✔ / optional = blank
 
-| # | 書式 | 必須 | 正式名称 | 意味 |
-| -- | ---- | ---- | ---- | ---- |
-| 1 | `SB\r\n` | ✔ | START BLACK | あなたは黒（先攻）。最初の手を指してください |
-| 2 | `SW\r\n` | ✔ | START WHITE | あなたは白（後攻）。相手の手を待ってください |
-| 3 | `MOd3\r\n` | ✔ | MOVE | 相手が d3 に置いた |
-| 4 | `PA\r\n` | ✔ | PASS | 相手がパス |
-| 5 | `BO[盤面状態64文字]\r\n` | | BOARD | 局面全体投入（**64 文字固定・行優先**。空きマスは `0`、黒 `1`、白 `2`。接続直後の同期・復帰時に使用。リセット復帰に対応しない CPU は無視してよい）。詳細は §8 座標・盤面の向きを参照。例: `BO0000000000000000000000000002100000012000000000000000000000000000\r\n` |
-| 6 | `EB\r\n` | ✔ | END BLACK | 終局・黒勝ち |
-| 7 | `EW\r\n` | ✔ | END WHITE | 終局・白勝ち |
-| 8 | `ED\r\n` | ✔ | END DRAW | 終局・引分 |
-| 9 | `VE\r\n` | ✔ | VERSION | バージョン問い合わせ。CPU は `VE<プロトコル版2桁><識別名>\r\n` で応答する（§7.2 #4 参照）。例: `VE01MyCPU-v1\r\n` |
-| 10 | `PI\r\n` | ✔ | PING | ピング |
+### 7.1 PC → CPU (input to CPU)
 
-**`MO` の書式**: `MO` 直後は **必ず列 (`a`-`h`) + 行 (`1`-`8`) の 2 文字**。
-スペース・区切り文字は挟まない（例: `MO d3` や `MOd-3` は不可）。
-座標は小文字のみ受理（`MOd3` は OK、`MOD3` は不可。§5 参照）。
+| # | Format | Required | Name | Meaning |
+| -- | ------ | -------- | ---- | ------- |
+| 1 | `SB\r\n` | ✔ | START BLACK | You play black (first). Make the opening move. |
+| 2 | `SW\r\n` | ✔ | START WHITE | You play white (second). Wait for the opponent. |
+| 3 | `MOd3\r\n` | ✔ | MOVE | Opponent placed at d3. |
+| 4 | `PA\r\n` | ✔ | PASS | Opponent passed. |
+| 5 | `BO[64-char board]\r\n` | | BOARD | Send the full board state (**fixed 64 chars, row-major**; empty `0`, black `1`, white `2`). Used for sync right after connection or on recovery. CPUs that don't support reset recovery may ignore. See §8. Example: `BO0000000000000000000000000002100000012000000000000000000000000000\r\n` |
+| 6 | `EB\r\n` | ✔ | END BLACK | Game over, black wins |
+| 7 | `EW\r\n` | ✔ | END WHITE | Game over, white wins |
+| 8 | `ED\r\n` | ✔ | END DRAW | Game over, draw |
+| 9 | `VE\r\n` | ✔ | VERSION | Version query. The CPU responds with `VE<2-digit proto ver><name>\r\n` (see §7.2 #4). Example: `VE01MyCPU-v1\r\n` |
+| 10 | `PI\r\n` | ✔ | PING | ping |
 
-### 7.2 CPU → PC（CPU からの応答）
+**`MO` format**: directly after `MO` are **exactly 2 chars: column (`a`-`h`)
+followed by row (`1`-`8`)**. No spaces or separators (e.g. `MO d3` and
+`MOd-3` are invalid). Coordinates are accepted in lowercase only (`MOd3`
+OK, `MOD3` not; see §5).
 
-| # | 書式 | 必須 | 正式名称 | 意味 |
-| - | ---- | ---- | ---- | ---- |
-| 1 | `MOd3\r\n` | ✔ | MOVE | d3 に置く |
-| 2 | `PA\r\n` | ✔ | PASS | パスする |
-| 3 | `PO\r\n` | ✔ | PONG | `PI\r\n` への応答 |
-| 4 | `VE<NN>[<名前>]\r\n` | ✔ | VERSION | `VE\r\n` への応答。`<NN>` は**プロトコルバージョン 2 桁 ASCII 数字固定** (`00`-`99`、先頭ゼロ必須、`VE1xxx` は不可)。`<名前>` は識別名 (ASCII printable 0x20-0x7E、0-16 文字、**省略可** — FPGA 向け最小実装は `VE01\r\n` のみでも OK)。当面は `01`（ドラフト v0.1）のみサポート。例: `VE01\r\n` / `VE01MyCPU-v1\r\n` |
-| 5 | `EN\r\n` | | END | 投了 |
-| 6 | `RE\r\n` | | READY | 起動完了。ホスト側は `RE` 受信で直前の指示を再送する（対局中のリセット復帰用。24/7 ボット運用では推奨） |
-| 7 | `ER<NN>[ <reason>]\r\n` | | ERROR | 仕様違反受信への応答。`<NN>` は**エラーコード 2 桁 ASCII 数字固定** (`00`-`99`、§7.3 エラーコード表参照)。`<reason>` は任意 ASCII printable 文字列 (最大 64 文字、先頭スペース区切り、デバッグ用)。FPGA 向け最小実装は `ER00\r\n` (6 バイト) で OK。受信側は §5.1 の通りログ記録のみで自動再送しない |
-| 8 | `ST<text>\r\n` | | STATUS | 思考中の状態を任意タイミングで送信。例: `ST d=12 n=45000\r\n`。PC 側は表示やログに使用。NBoard Protocol の `status` 相当。`<text>` は ASCII printable の自由形式テキスト。構造化データ（盤面スナップショット等）は別コマンド（§7.2 #11 `BS` 等）を使う |
-| 9 | `NC<nodes>,<ms>\r\n` | | NODESTATS | 着手送信直後に探索統計を返す任意応答。例: `NC125000,450\r\n`（探索ノード数と所要ミリ秒）。NBoard Protocol の `nodestats` 相当 |
-| 10 | `RS\r\n` | | REQUEST SYNC | 盤面再同期要求。CPU が自盤面とホスト盤面の乖離を検知した場合（例: ホストから届いた `MO?` が自盤面では非合法）に送る。ホスト側は現在の局面を `BO<盤面状態64文字>\r\n` で送信し、続けて**直前に送った指示**（通常は `MO?\r\n`）を再送する。詳細は §13 異常系・復帰フロー参照 |
-| 11 | `BS<64char>\r\n` | | BOARD STATUS | CPU が保持している現在の盤面スナップショットを任意タイミングで通知。書式は `BO` と同じ（§8 行優先 64 文字、0=空 / 1=黒 / 2=白）。**報告のみで副作用なし**（PC 側は盤面突合・診断ログ・観戦用に使う）。`BO`（§7.1 #5 PC→CPU、盤面設定）と方向が逆の対。FPGA 最小実装では省略推奨 |
+### 7.2 CPU → PC (response from CPU)
 
-### 7.3 ER エラーコード表
+| # | Format | Required | Name | Meaning |
+| - | ------ | -------- | ---- | ------- |
+| 1 | `MOd3\r\n` | ✔ | MOVE | place at d3 |
+| 2 | `PA\r\n` | ✔ | PASS | pass |
+| 3 | `PO\r\n` | ✔ | PONG | response to `PI\r\n` |
+| 4 | `VE<NN>[<name>]\r\n` | ✔ | VERSION | response to `VE\r\n`. `<NN>` is **fixed 2-digit ASCII protocol version** (`00`-`99`, leading zero required, `VE1xxx` is invalid). `<name>` is an identifier (ASCII printable 0x20-0x7E, 0-16 chars; **omittable** — minimum FPGA implementations may send `VE01\r\n`). For now only `01` (Draft v0.1) is supported. Examples: `VE01\r\n` / `VE01MyCPU-v1\r\n` |
+| 5 | `EN\r\n` | | END | resign |
+| 6 | `RE\r\n` | | READY | boot complete. The host re-sends the most recent instruction on receipt of `RE` (recovery from in-game CPU reset; recommended for 24/7 bot operation). |
+| 7 | `ER<NN>[ <reason>]\r\n` | | ERROR | response to a spec violation. `<NN>` is **fixed 2-digit ASCII error code** (`00`-`99`, see §7.3). `<reason>` is an optional ASCII printable string (max 64 chars, leading-space delimited, for debugging). Minimum FPGA implementation: just `ER00\r\n` (6 bytes). The receiver only logs per §5.1; no auto-retry. |
+| 8 | `ST<text>\r\n` | | STATUS | Send a thinking-status update at any time. Example: `ST d=12 n=45000\r\n`. The PC uses this for display or logging; equivalent to NBoard Protocol's `status`. `<text>` is free-form ASCII printable text. Use a different command (e.g. §7.2 #11 `BS`) for structured data such as a board snapshot. |
+| 9 | `NC<nodes>,<ms>\r\n` | | NODESTATS | Optional response sent right after a move with search statistics. Example: `NC125000,450\r\n` (search nodes and elapsed milliseconds). Equivalent to NBoard Protocol's `nodestats`. |
+| 10 | `RS\r\n` | | REQUEST SYNC | Request board resync. The CPU sends this when it detects divergence between its own board and the host's (e.g. an `MO?` from the host is illegal on its board). The host then sends the current board as `BO<64-char>\r\n` and re-sends **the most recent instruction** (typically the same `MO?\r\n`). See §13. |
+| 11 | `BS<64char>\r\n` | | BOARD STATUS | The CPU notifies its current board snapshot at any time. Format identical to `BO` (§8 row-major 64 chars, 0=empty / 1=black / 2=white). **Report-only, no side effects** (the PC uses it for cross-check, diagnostics, spectator view). The reverse-direction counterpart of `BO` (§7.1 #5 PC→CPU board push). Recommended to omit in minimum FPGA implementations. |
 
-`ER<NN>` の 2 桁コード一覧。送り手は該当する最も具体的なコードを使う。
-特定不能な場合は `ER00` (Generic) を使ってよい。
+### 7.3 ER Error Code Table
 
-| コード | 名称 | 発生例 |
-| ---- | ---- | ---- |
-| `00` | Generic / Unspecified | 汎用エラー (FPGA 最小実装で理由不特定のとき) |
-| `01` | Unknown command | 未知コマンド (`XX\r\n` 等、§5.1) |
-| `02` | Lowercase command | 小文字コマンド (`pi\r\n`, `Pi\r\n` 等、§5) |
-| `03` | Line ending violation | CR+LF 以外の改行 (LF 単独 `PI\n`、CR 単独 `PI\r` 等、§5) |
-| `04` | Invalid coordinate format | `MOz9`, `MO9d`, `MOD3` 等書式違反 (§8) |
-| `05` | Illegal move | 合法手でない着手 (盤面論理違反、[検討事項.md §2](検討事項.md#2-無効な着手--不正応答への対応)) |
-| `06` | Invalid protocol state | §12 状態遷移表で禁止された受信 (対局中の `SB` 等) |
-| `07` - `29` | 予約 | 仕様拡張用、v0.2 以降で割当 |
-| `30` - `99` | ユーザ定義 | 各 CPU 実装が自由に使える範囲 |
+Two-digit codes for `ER<NN>`. Senders use the most specific applicable code;
+fall back to `ER00` (Generic) when the cause cannot be pinned down.
 
-**FPGA 向け最小実装**: `ER00\r\n` 固定で送るだけでも仕様適合。受信側は個別コードの
-意味を区別せず「何らかの違反があった」としてログに残して構わない。
+| Code | Name | Example trigger |
+| ---- | ---- | --------------- |
+| `00` | Generic / Unspecified | catch-all (used by minimum FPGA when cause is unidentified) |
+| `01` | Unknown command | unknown command (`XX\r\n` etc., §5.1) |
+| `02` | Lowercase command | lowercase command (`pi\r\n`, `Pi\r\n`, etc., §5) |
+| `03` | Line ending violation | non-CR+LF line ending (LF alone `PI\n`, CR alone `PI\r`, etc., §5) |
+| `04` | Invalid coordinate format | `MOz9`, `MO9d`, `MOD3`, etc. (§8) |
+| `05` | Illegal move | move that is not legal under the current board (see [open-issues §2](検討事項.md#2-無効な着手--不正応答への対応)) |
+| `06` | Invalid protocol state | a receive that §12 forbids in the current state (e.g. `SB` mid-game) |
+| `07` - `29` | Reserved | for future spec versions (v0.2+) |
+| `30` - `99` | User-defined | available for individual CPU implementations |
 
-**PC 実装のベストプラクティス**: 該当コード + 理由テキストで詳細化。
-例: `ER04 MO expects lowercase coord, got 'MOD3'\r\n`
+**Minimum FPGA implementation**: sending fixed `ER00\r\n` is spec-compliant.
+Receivers may ignore the specific code and just log "some violation occurred".
 
-## 8. 座標・盤面の向き
+**Recommended PC implementation**: pair the code with a reason for richer
+diagnostics. Example: `ER04 MO expects lowercase coord, got 'MOD3'\r\n`
 
-オセロ棋譜の標準表記（世界オセロ連盟 WOF 流）に準拠する。
+## 8. Coordinates and Board Orientation
 
-- **列**: `a`〜`h`（左→右）
-- **行**: `1`〜`8`（上→下、`a1` が左上）
-- **移動コマンド内の座標は小文字**（列 `a`〜`h`）で送信。例: `MOd3`, `MOh8`, `MOa1`
-- 大文字も受理する（§5. 文字コード・改行参照）
-- **BO の並び順**: 行優先で `a1, b1, c1, ... h1, a2, b2, ... h8` の 64 文字（= row-major、行 1 → 行 8）
-- **初期局面**: `d4=W(2), e4=B(1), d5=B(1), e5=W(2)`（他はすべて空 `0`）
+Follows the standard Othello notation (World Othello Federation / WOF style).
+
+- **Columns**: `a`-`h` (left to right)
+- **Rows**: `1`-`8` (top to bottom; `a1` is the upper-left)
+- **Coordinates inside MOVE commands are lowercase** (`a`-`h`). Examples:
+  `MOd3`, `MOh8`, `MOa1`
+- Uppercase is also accepted (see §5)
+- **`BO` ordering**: row-major `a1, b1, c1, ... h1, a2, b2, ... h8` for a total
+  of 64 chars (i.e. row 1 → row 8)
+- **Initial position**: `d4=W(2), e4=B(1), d5=B(1), e5=W(2)` (everything else
+  empty `0`)
   → `0000000000000000000000000002100000012000000000000000000000000000`
 
-CPU 内部の盤面表現（`row*8+col` / `col*8+row` / ビットボード等）は **実装者の自由**。
-本書はワイヤ上のシリアライズ順のみを規定する。
+The CPU's internal board representation (`row*8+col`, `col*8+row`, bitboard,
+etc.) is **up to the implementer**. This document only defines the wire
+serialization order.
 
-![座標系と BO 文字列の対応](board-coord.png)
+![Coordinate system and BO string mapping](board-coord.png)
 
-PlantUML ソース: [board-coord.puml](board-coord.puml)
+PlantUML source: [board-coord.puml](board-coord.puml)
 
-## 9. プロトコル設計の指針
+## 9. Protocol Design Guidelines
 
-- **1 行 1 メッセージ**。状態を持たないので CPU 側パーサが単純
-- **CPU は受信内容を echo してはならない** — machine-to-machine プロトコルなので
-  受信ストリームにエコーが混ざると解析が壊れる。ホスト側は万一 echo されても
-  頑健にパースする
-- **再送はしない** — CPU の応答待ちはタイムアウトまで黙って待つ
-- **`RE\r\n`（READY）受信時**、ホスト側は直前の指示を再送する（起動タイミング吸収）。
-  24/7 ボット運用で CPU が単独リセットした場合の復帰手段として重要
-- **現在状態で無効なコマンド**（例: IDLE で `MOd?` 受信）は **黙って捨てる**
-  （`\r\n` まで読み飛ばしてパーサリセット）。実装者の裁量で `ER\r\n`（任意、
-  パラメータなし）を返してよい
+- **One message per line**. Stateless, so the CPU-side parser stays simple.
+- **The CPU must not echo received bytes** — this is a machine-to-machine
+  protocol, and an echo mixed into the receive stream would break parsing.
+  The host should still parse robustly even if echo somehow leaks.
+- **No retries** — the CPU just waits silently until timeout for a response.
+- **On `RE\r\n` (READY)**, the host re-sends the most recent instruction
+  (absorbing boot-timing variations). Important as a recovery mechanism for
+  24/7 bot operation if the CPU resets independently.
+- **Commands invalid in the current state** (e.g. receiving `MOd?` while IDLE)
+  are **silently dropped** (skip until `\r\n` and reset the parser). The
+  implementer may optionally return `ER\r\n` (parameter-less).
 
-## 10. 正常フロー
+## 10. Normal Flow
 
-シリアル接続確立後の通信例。以下は `\r\n` 省略表記。
+A typical conversation after the serial connection is established. `\r\n` is
+omitted in the listing.
 
-凡例:
+Legend:
 
 - `>` CPU → PC
 - `<` PC → CPU
 
 ```text
-< PI                    PING（起動・生存確認）
+< PI                    PING (boot / liveness check)
 > PO                    PONG
-< VE                    VERSION 問い合わせ
-> VE01MyCPU-v1     VERSION 応答（先頭 2 桁はプロトコルバージョン）
-< SB                    START BLACK（黒先攻・初手要求）
-> MOf5                   MOVE f5（CPU 着手・黒の代表的初手/虎定石の起点）
-< MOd6                   MOVE d6（相手着手通知・虎定石の白応手）
-  ...（以下、手番ごとに交互。PC は定期的に PI を挟み heartbeat 確認）
+< VE                    VERSION query
+> VE01MyCPU-v1          VERSION reply (first 2 chars are the protocol version)
+< SB                    START BLACK (black to move; opening move requested)
+> MOf5                  MOVE f5 (CPU's move; representative black opening / Tiger opening start)
+< MOd6                  MOVE d6 (opponent's move; white reply in the Tiger opening)
+  ... (alternating from here. PC interleaves PI for heartbeat)
 < PI
 > PO
   ...
-> EN                    END（CPU 投了・終局）
+> EN                    END (CPU resigns)
 ```
 
-**起動検出は PI/PO 主導**。PC が能動的に `PI` を送り CPU が `PO` で応える構造
-にしているため、シリアル接続のタイミングや CPU の起動順序に依存しない
-（CPU 側は純粋リアクティブで実装できる）。
+**Boot detection is PI/PO-driven**. The PC actively sends `PI` and the CPU
+replies with `PO`, so the design does not depend on serial-link timing or CPU
+boot order (the CPU side can be implemented purely reactively).
 
-![正常フロー シーケンス図](flow-normal.png)
+![Normal flow sequence diagram](flow-normal.png)
 
-PlantUML ソース: [flow-normal.puml](flow-normal.puml)
+PlantUML source: [flow-normal.puml](flow-normal.puml)
 
-## 11. CPU 側 状態遷移図（例）
+## 11. CPU-side State Diagram (example)
 
-以下の状態遷移は CPU 実装の **一例**。本書のプロトコル意味論（メッセージ書式・
-タイミング要件）さえ満たせば、CPU 内部の状態表現は実装者の自由。
+This state machine is **one example** of a CPU implementation. As long as the
+protocol semantics (message format, timing) defined here are met, the CPU's
+internal state representation is up to the implementer.
 
 <!-- markdownlint-disable-next-line MD033 -->
-<img src="state-external-cpu.png" alt="CPU 側 状態遷移図（例）" width="1000" />
+<img src="state-external-cpu.png" alt="CPU-side state diagram (example)" width="1000" />
 
-PlantUML ソース: [state-external-cpu.puml](state-external-cpu.puml)
+PlantUML source: [state-external-cpu.puml](state-external-cpu.puml)
 
-基本は純粋リアクティブ（PC からの受信に反応して返すだけ）。
-能動送信は BOOT 直後の `RE\r\n`（対局中リセットからの復帰要求）のみ。
+The base behavior is purely reactive (respond to received messages). The only
+unsolicited send is `RE\r\n` right after BOOT (recovery request from in-game
+reset).
 
-| 状態 | 役割 |
-| ---- | ---- |
-| C0: BOOT | 電源投入直後。`RE` 送信後に IDLE へ |
-| C1: IDLE | 接続済み・対局なし or 終局後。`SB`/`SW` を待つ。終局種別（`EB`/`EW`/`ED`）が必要なら内部変数に保持 |
-| C2: MY_TURN | CPU 手番。着手計算後 `MOd?` / `PA` / `EN` のいずれかを送信 |
-| C3: WAIT_OPP | 相手手番。受信待ち |
+| State | Role |
+| ----- | ---- |
+| C0: BOOT | Right after power-on. Send `RE`, then transition to IDLE. |
+| C1: IDLE | Connected, no game in progress (or post-game). Wait for `SB`/`SW`. If you need to remember the game-end type (`EB`/`EW`/`ED`), keep it as an internal variable. |
+| C2: MY_TURN | CPU's turn. After computing a move, send one of `MOd?` / `PA` / `EN`. |
+| C3: WAIT_OPP | Opponent's turn. Wait for input. |
 
-**終局時の振る舞い**:
+**End-of-game behavior**:
 
-- CPU が `EN\r\n`（投了）を送信した場合、**PC は応答を返さず**次の `SB`/`SW`
-  まで沈黙する。CPU は `EN` 送信後ただちに C1 (IDLE) へ遷移してよい
-- PC 判定の終局（`EB`/`EW`/`ED`）を受信した場合も、CPU は C1 (IDLE) へ遷移し、
-  次の `SB`/`SW` を待つ
-- 終局種別（勝敗）を LED や LCD 等に表示したい場合、状態ではなく CPU 内部変数として保持する
-  （プロトコル上は IDLE と区別しないため）
+- When the CPU sends `EN\r\n` (resign), **the PC sends no reply** and stays
+  silent until the next `SB`/`SW`. The CPU may transition to C1 (IDLE)
+  immediately after sending `EN`.
+- On receiving a PC-determined end (`EB`/`EW`/`ED`), the CPU also transitions
+  to C1 (IDLE) and waits for the next `SB`/`SW`.
+- To display the result (win/loss/draw) on an LED or LCD, store it as an
+  internal CPU variable rather than as a state (the protocol does not
+  distinguish it from IDLE).
 
-**共通応答（副作用なし）**:
+**Common responses (no side effects)**:
 
-- 受信 `PI` → 送信 `PO`（**全状態で有効**。BOOT 中を除き常に応答）
-- 受信 `VE` → 送信 `VE<NN><名前>`（**C1 (IDLE) 以降で有効**。BOOT 中は応答しない。`<NN>` はプロトコルバージョン 2 桁）
+- On receiving `PI` → send `PO` (**valid in all states except BOOT**)
+- On receiving `VE` → send `VE<NN><name>` (**valid from C1 (IDLE) onward**;
+  ignored during BOOT. `<NN>` is the 2-digit protocol version)
 
-> **注記（送受独立）**: UART の TX/RX は独立しており、CPU 側は送信中でも受信を取りこぼしてはならない。
-> 例えば `VE<NN><名前>\r\n` を送出している最中にPC から `MOd?\r\n` が到着することがある。
-> CPU は RX を割り込み／FIFO 等でバッファリングし、送信完了後に解釈すること
-> （半二重プロトコルではない）。
+> **Note (TX/RX independence)**: UART TX and RX are independent; the CPU must
+> not drop received bytes while transmitting. For example, an `MOd?\r\n` may
+> arrive from the PC while the CPU is still sending `VE<NN><name>\r\n`. The
+> CPU must buffer RX (interrupt / FIFO / etc.) and parse it after sending
+> completes (this is not a half-duplex protocol).
 
-**盤面同期**:
+**Board sync**:
 
-- 受信 `BO...` は **C1 (IDLE) でのみ** 受理し、内部盤面を上書き。続く `SB`/`SW` を待つ
-  （接続直後の同期・リセット復帰時に使用。対局中は受理しない）
-- **例外**: CPU が `RS\r\n` を能動送信した直後にホストから届く `BO...` は、対局中
-  (C2 / C3) でも受理して盤面を上書きする。§13.1 盤面乖離からの復帰フローを参照
+- `BO...` is accepted **only in C1 (IDLE)** and overwrites the internal board.
+  Then wait for `SB`/`SW` (used right after connect / on reset recovery; not
+  accepted mid-game).
+- **Exception**: `BO...` arriving from the host immediately after the CPU
+  proactively sent `RS\r\n` is accepted even mid-game (C2 / C3) and
+  overwrites the board. See §13.1.
 
-## 12. 状態遷移表
+## 12. State Transition Table
 
-上の状態遷移図を **状態 × 受信イベント** のマトリクスで表したもの
-（State Transition Table / Mealy マシン形式）。縦欄に CPU 側の状態、横欄に
-PC から受信するメッセージを並べ、セルに「アクション ／ 遷移先」を書く。
-実装者は状態ごとに「どのイベントで何をして、どの状態に行くか」を一覧できる。
+Same machine as §11, expressed as a **state × received event** matrix
+(state-transition table / Mealy form). Rows are CPU states, columns are
+messages received from the PC, and each cell is "action / next state".
+Implementers can read off "given event X in state Y, do Z and go to state W"
+at a glance.
 
-| 状態 ＼ 受信 | `PI` | `VE` | `SB` | `SW` | `MOd?` | `PA` | `BO...` | `EB`/`EW`/`ED` |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| state＼event | `PI` | `VE` | `SB` | `SW` | `MOd?` | `PA` | `BO...` | `EB`/`EW`/`ED` |
+| ------------ | ---- | ---- | ---- | ---- | ------ | ---- | ------- | --------------- |
 | C0: BOOT | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ |
-| C1: IDLE | 送 `PO` | 送 `VE 名` | →C2 | →C3 | — | — | 盤面上書き | — |
-| C2: MY_TURN² | 送 `PO` | 送 `VE 名` | ※ | ※ | — | ※ | — | →C1 |
-| C3: WAIT_OPP | 送 `PO` | 送 `VE 名` | ※ | ※ | 盤面更新 ／ →C2 | →C2 | — | →C1 |
+| C1: IDLE | send `PO` | send `VE name` | →C2 | →C3 | — | — | overwrite board | — |
+| C2: MY_TURN² | send `PO` | send `VE name` | ※ | ※ | — | ※ | — | →C1 |
+| C3: WAIT_OPP | send `PO` | send `VE name` | ※ | ※ | update board / →C2 | →C2 | — | →C1 |
 
-**凡例**:
+**Legend**:
 
-- `送 X`: メッセージ `X\r\n` を送信（留まる）
-- `→Cn`: 状態 Cn へ遷移
-- `—`: 黙って破棄（パーサをリセットして次の `\r\n` まで読み飛ばす。任意で `ER\r\n` を返してよい）
-- `※`: **検討事項（未確定）** — §[15. 検討事項（未確定）](#15-検討事項未確定)参照
+- `send X`: send `X\r\n` (stay in current state)
+- `→Cn`: transition to state Cn
+- `—`: silently discard (reset parser and skip to next `\r\n`; optionally
+  return `ER\r\n`)
+- `※`: **Open issue (undecided)** — see §[15. Open Issues](#15-open-issues)
 
-**注**:
+**Notes**:
 
-- ¹ BOOT 中は任意の受信を破棄。CPU の初期化完了後に `RE\r\n` を能動送信して C1 (IDLE) へ遷移
-- ² C2 (MY_TURN) は着手計算中の一時状態。計算完了後に CPU が自発的に
-  `MOd?\r\n` / `PA\r\n` / `EN\r\n` を送信し、それぞれ C3 / C3 / C1 へ遷移する
-  （受信イベントによる遷移ではなく、CPU 内部の自発遷移）
-- SB/SW による対局開始時の手番割当: `SB` を受けたら黒（先攻）として C2 (MY_TURN) へ、
-  `SW` を受けたら白（後攻）として C3 (WAIT_OPP) へ
+- ¹ While in BOOT, all received bytes are discarded. After CPU init completes,
+  proactively send `RE\r\n` to transition to C1 (IDLE).
+- ² C2 (MY_TURN) is a temporary state during move computation. Once done, the
+  CPU spontaneously sends `MOd?\r\n` / `PA\r\n` / `EN\r\n` and transitions to
+  C3 / C3 / C1 respectively (a self-transition by the CPU, not driven by an
+  incoming event).
+- Side assignment by `SB`/`SW` at game start: receiving `SB` makes the CPU
+  black (first) and transitions to C2 (MY_TURN); receiving `SW` makes it white
+  (second) and transitions to C3 (WAIT_OPP).
 
-## 13. 異常系・復帰フロー
+## 13. Error Handling and Recovery Flow
 
-対局中に CPU が予期せずリセットされた場合、CPU は起動直後に `RE\r\n` を能動送信する。
-PC は `RE` を検知したら**直前に送った指示（`SB` / `MOd?` / `BO...` 等）を再送**
-して局面を復元する。
+If the CPU is unexpectedly reset mid-game, it proactively sends `RE\r\n` right
+after boot. The host detects `RE` and **re-sends the most recent instruction
+(`SB` / `MOd?` / `BO...` etc.)** to restore the position.
 
 ```text
-（対局中に CPU 電源リセット）
-> RE                    READY（再起動完了・再送要求）
-< MOd5                   PC が直前の MOVE を再送
-> MOd7                   CPU 着手
+(CPU reset mid-game)
+> RE                    READY (boot complete; re-send request)
+< MOd5                  PC re-sends the previous MOVE
+> MOd7                  CPU's move
   ...
 ```
 
-![異常系・復帰フロー シーケンス図](flow-recovery.png)
+![Recovery flow sequence diagram](flow-recovery.png)
 
-PlantUML ソース: [flow-recovery.puml](flow-recovery.puml)
+PlantUML source: [flow-recovery.puml](flow-recovery.puml)
 
-### 13.1 盤面乖離からの復帰（`RS`）
+### 13.1 Recovery from Board Divergence (`RS`)
 
-対局中に CPU が「ホストから届いた相手の `MO?` が自盤面では非合法」など、
-**自盤面とホスト盤面の乖離**を検知した場合、CPU は `RS\r\n`（REQUEST SYNC）を
-能動送信する。ホストは現在の局面を `BO<盤面状態64文字>\r\n` で送り、続けて
-**直前に送った指示**（通常は相手の `MO?\r\n`）を再送する。
+If the CPU detects **divergence between its own board and the host's** during
+a game (for example, an `MO?` from the host is illegal on the CPU's board),
+the CPU proactively sends `RS\r\n` (REQUEST SYNC). The host then sends the
+current board as `BO<64-char>\r\n` and re-sends **the most recent instruction**
+(typically the same opponent `MO?\r\n`).
 
 ```text
-（CPU が ホスト→CPU の MO?\r\n を自盤面で非合法と判定）
+(CPU determines that the host→CPU MO?\r\n is illegal on its board)
 > RS                    REQUEST SYNC
-< BO0000...             PC が現在の局面を送信
-< MOb5                   PC が直前の MOVE を再送
-  （CPU は BO で盤面を上書きしてから MO を処理）
-> MOd7                   CPU 着手
+< BO0000...             PC sends the current board
+< MOb5                  PC re-sends the previous MOVE
+  (CPU overwrites its board from BO, then processes MO)
+> MOd7                  CPU's move
   ...
 ```
 
-`RS` は任意実装。CPU が盤面管理をホスト丸投げで行う実装（毎手 `BO` 同期）では
-使わなくてよい。一方、CPU 側が独自に盤面を保持する実装では、PC 側バグや
-ビット化け等による乖離から自律復帰できる手段として推奨する。
+`RS` is optional. CPU implementations that delegate board management to the
+host (sync via `BO` every move) need not use it. Implementations that maintain
+an internal board are encouraged to use it — it provides a self-recovery path
+from PC-side bugs or bit corruption.
 
-**再試行ポリシー（ホスト側）**: `RS` → `BO` + 指示再送で解消せず `RS` が連続して届く
-場合、ホスト側は一定回数（例: 3 回）を上限に試行を打ち切って対局を中断してよい。
+**Retry policy (host side)**: if `RS` arrives repeatedly without the
+`RS` → `BO` plus instruction re-send resolving it, the host may abort the
+game after a fixed number of attempts (e.g. 3).
 
-## 14. 参考
+## 14. Reference
 
-### 14.1 シリアル端末ソフト設定のヒント
+### 14.1 Serial Terminal Software Hints
 
-§5 の「改行は CR+LF のみ」を反映するため、端末ソフトは CRLF モードで設定する。
+To honor "CR+LF only" from §5, configure the terminal in CRLF mode.
 
-| ソフト | 設定 |
-| ---- | ---- |
-| **VSCode Serial Monitor** | 改行コードを `CRLF` に設定 |
-| **TeraTerm** | [設定] → [端末設定] → 改行コード: 受信=CR+LF、送信=CR+LF |
-| **PuTTY** | [Terminal] → `Implicit CR in every LF` は OFF（送信データを変更しないため）。送信末尾は明示的に CR+LF を付ける |
-| **minicom** (Linux/Mac) | `^A U` で改行モードを CR+LF にする（Add Carriage Return をオン） |
-| **Arduino IDE シリアルモニタ** | 右下のプルダウンで `CR と LF の両方` を選択 |
+| Software | Setting |
+| -------- | ------- |
+| **VSCode Serial Monitor** | set line ending to `CRLF` |
+| **TeraTerm** | [Setup] → [Terminal] → New-line: Receive=CR+LF, Transmit=CR+LF |
+| **PuTTY** | [Terminal] → turn `Implicit CR in every LF` OFF (do not modify outgoing data). Append CR+LF explicitly to outgoing lines. |
+| **minicom** (Linux/Mac) | `^A U` to set new-line mode to CR+LF (turn on Add Carriage Return) |
+| **Arduino IDE Serial Monitor** | choose `Both NL & CR` in the bottom-right dropdown |
 
-いずれも既定が LF のみの場合があるので、CPU 実装者は初回接続時に設定を確認すること。
-LF のみで送信すると §5.1 に従い CPU から `ER` が返る。
+The default is often LF only, so verify the setting on first connection. If
+LF only is sent, the CPU returns `ER` per §5.1.
 
-### 14.2 設計判断の背景: なぜ「大文字コマンド」「CR+LF のみ」にしたか
+### 14.2 Design Rationale: Why Uppercase Commands and CR+LF Only
 
-#### 大文字コマンド (§5)
+#### Uppercase Commands (§5)
 
-- **FPGA / MCU 実装のシンプル化**: 受信バイトをそのままコマンド表と比較できる。
-  `toupper()` 相当の回路/分岐が不要
-- **可読性**: 端末モニタ表示で `PI`/`VE`/`MO` などがコマンドであることが一目で分かる。
-  座標 `a1`-`h8` との区別も明確（コマンド=大文字、座標=小文字）
-- **NBoard Protocol 等の慣習踏襲**: オセロ系プロトコルの多くは大文字コマンドを採用
-- **タイプミス検出**: 小文字で送ると `ER` が即返ってくるので誤実装に早期に気付ける
+- **Simpler FPGA / MCU implementation**: received bytes can be compared
+  directly against the command table; no `toupper()`-equivalent circuit /
+  branch is needed.
+- **Readability**: in a serial-monitor display, `PI`/`VE`/`MO` etc. visibly
+  stand out as commands. The distinction from coordinates `a1`-`h8` is also
+  clear (commands = uppercase, coordinates = lowercase).
+- **Convention from related protocols**: most Othello-family protocols
+  (e.g. NBoard Protocol) use uppercase commands.
+- **Typo detection**: a lowercase send returns `ER` immediately, helping
+  catch mis-implementations early.
 
-#### CR+LF のみ (§5)
+#### CR+LF Only (§5)
 
-- **シリアル端末のデフォルトとの整合**: TeraTerm / PuTTY / Arduino IDE シリアルモニタ
-  など主要端末ソフトは既定が CR+LF。手動デバッグ時に設定変更不要で繋がる
-- **Enter キーの素の挙動と一致**: ほとんどの端末で Enter キーは CRLF を送出する。
-  ユーザーが手打ちで `PI`+Enter と叩くだけで仕様通りのバイト列が流れるため、
-  シリアルモニタでの一次デバッグが直感的
-- **インターネット系テキストプロトコルの事実上の標準**: Telnet (RFC 854) を起点に、
-  HTTP / SMTP / IRC / FTP コマンドチャネル等、ASCII ライン指向のワイヤフォーマットは
-  歴史的に CRLF を採用してきた。本書もその慣習に従う
-- **Windows ツールチェインとの親和性**: メモ帳・PowerShell・コマンドプロンプトを含め、
-  Windows 系ツールはネイティブで CR+LF を扱う
-- **オセロ系プロトコルとの並び**: NBoard Protocol など既存の Othello エンジン通信
-  プロトコルとの整合（§17 参照）
-- **行端検出の堅牢性**: `0x0D 0x0A` のシーケンスは ASCII テキスト中で出現しないため、
-  単独 LF より誤検出に強い（バイナリ的なゴミ混入時の同期復帰がしやすい）。
-  孤立 CR / 孤立 LF はそれだけで §5.1 違反のシグナルとして機能する
-- **TX/RX 対称・単一ルール**: CPU 側もホスト側も「`\r\n` で確定、それ以外の改行は
-  §5.1 違反」の単一ルールで実装できる。LF のみ規定だと「CR は混入禁止」の
-  除外規則を別途明記しないと曖昧になる
+- **Aligned with serial terminal defaults**: TeraTerm / PuTTY / Arduino IDE
+  Serial Monitor and other major tools default to CR+LF, so manual debugging
+  works out of the box without changing settings.
+- **Matches the raw Enter key**: on most terminals, Enter sends CRLF.
+  Typing `PI`+Enter at a serial monitor produces the spec-compliant byte
+  sequence directly, so first-pass debugging feels natural.
+- **De-facto standard for ASCII text protocols on the internet**: from Telnet
+  (RFC 854) onward, line-oriented wire formats — HTTP / SMTP / IRC / FTP
+  command channel etc. — historically use CRLF. This document follows that
+  tradition.
+- **Affinity with the Windows toolchain**: Notepad, PowerShell, and Command
+  Prompt natively handle CR+LF.
+- **Consistency with Othello-family protocols**: aligns with NBoard Protocol
+  and other existing Othello-engine wire formats (see §17).
+- **Robust line-end detection**: the byte sequence `0x0D 0x0A` does not occur
+  in plain ASCII text, so it is more resilient against false positives than a
+  bare LF (and recovers cleanly after binary-noise corruption). An isolated
+  CR or LF on its own is itself a §5.1 violation signal.
+- **Symmetric TX/RX, single rule**: both CPU and host can implement "`\r\n`
+  ends a line, anything else is a §5.1 violation" as one uniform rule. With
+  LF-only, an extra "no embedded CR" exclusion clause has to be stated
+  separately, which is fuzzier.
 
-#### トレードオフ
+#### Trade-offs
 
-- **行端検出に状態遷移が必要**: FPGA 実装では `CR 受信→LF 待ち` の 1 段追加。
-  ただし数ゲート規模で済む
-- **1 バイト増**: `BO` 送信時 67 → 68 バイト。RX バッファ推奨値 80 バイト内に収まる
-- **Unix 系ツール (`grep`/`sed`/`awk`) でログ閲覧時に行末の `^M` が見える**: 表示上の
-  ノイズだが解析挙動には影響なし。`tr -d '\r'` で除去可
-- **Git autocrlf 問題**: リポジトリにシリアルログや期待出力ファイル (§3 テスト環境構成例) を
-  格納する場合、`.gitattributes` で当該ファイルを `binary` または `text eol=crlf`
-  指定し、チェックアウト時の改行コード変換を抑止する必要がある
+- **Line-end detection needs a small state machine**: an FPGA needs a
+  `CR received → wait for LF` step, but it costs only a few gates.
+- **One extra byte**: `BO` grows from 67 → 68 bytes; still fits the
+  recommended 80-byte RX buffer.
+- **`^M` shows up in logs viewed with Unix tools (`grep`/`sed`/`awk`)**:
+  visual noise but no functional impact. Strip with `tr -d '\r'`.
+- **Git autocrlf concerns**: when storing serial logs or expected-output
+  fixtures (§3) in the repo, set `.gitattributes` to `binary` or
+  `text eol=crlf` for those files to prevent line-ending conversion at
+  checkout.
 
-総合すると **既存ツールチェインとの整合性**・**手打ちデバッグの容易さ**・
-**ASCII テキスト中で衝突しない行端シーケンス** のメリットが、FPGA 側のわずかな
-実装負荷増を上回ると判断した。
+Overall, the gains from **toolchain alignment**, **easy hand-typed debugging**,
+and **a line-end sequence that doesn't collide with ASCII text** outweigh the
+modest implementation cost on the FPGA side.
 
-## 15. 検討事項（未確定）
+## 15. Open Issues
 
-ドラフト段階で仕様が固まっていない項目は別ファイル
-[検討事項.md](検討事項.md) を参照。実装者からのフィードバックを募集。
+Unresolved issues during the draft phase are tracked in a separate file:
+[open-issues.md (検討事項.md)](検討事項.md). Implementer feedback is welcome.
 
-## 16. 設計レビュー
+## 16. Design Review
 
-ドラフトに対する 4 つの視点（自作 CPU 作成者 / FPGA 制作者 / リバーシゲーマー /
-PC 側実装者）からのレビュー結果は別ファイル [設計レビュー.md](設計レビュー.md) を参照。
+Review notes from four perspectives (custom CPU author / FPGA designer /
+Reversi player / PC-side implementer) live in a separate file:
+[design-review.md (設計レビュー.md)](設計レビュー.md).
 
-## 17. 本書に追記を検討するなら
+## 17. Possible Future Additions
 
-リバーシ／オセロ界隈の慣習・他プロトコルとの整合性を踏まえた、本書への
-追記候補。
+Candidates for future additions, considering Reversi/Othello conventions and
+compatibility with other protocols.
 
-- **§14 参考に NBoard Protocol を追加**: 本書と同種の Othello エンジン通信プロトコル。
-  CPU 製作者がもう一つの実装例として参照できると設計判断の納得感が上がる
-- **§8 座標・盤面の向きに Thor 棋譜形式との互換性を明記**: `MOf5` の `f5` 部分は
-  Thor 棋譜 DB（WOF 公式）の座標表記と一致する、という一文があると棋譜解析連携が
-  しやすい
-- **[検討事項.md](検討事項.md) に「定石名の自動検出」を追加**: 本書の責務に含めるか否か。
-  結論としてはPC 側機能（CPU は定石名を知る必要がない）とするのが妥当だが、
-  設計判断として一度触れておくと将来議論を蒸し返さずに済む
-- **§9 プロトコル設計の指針に「持ち時間制御は本書の範囲外」を追加**: WOF 公式は
-  30 分切れ負けや Fischer 加算などのルールがあるが、本書は 1 手タイムアウトの
-  規定のみで、対局全体の時間管理は PC 側 / ルール層の責務
-- **[検討事項.md](検討事項.md) に「Thor 形式棋譜のエクスポート」を追加**: 本プロトコルの結果を
-  Thor 形式に変換してPC 側で保存するか。CPU とPC の境界をどこに引くか
-- **★ NBoard Protocol との互換性強化**（詳細は [NBoard互換性検討.md](NBoard互換性検討.md) 参照）
-  - ✅ **反映済み**: `ST<text>\r\n`（STATUS）、`NC<nodes>,<ms>\r\n`（NODESTATS）、
-    `VE` 応答への `p<N>` プロトコルバージョン付加（いずれも CPU 側の任意実装）
-  - 未反映（中〜高コスト）: `SD<n>`（探索深さ指定）、`HI<n>`（候補手問い合わせ）、
-    `BH`（Thor 形式での履歴伝達）、GGF 互換モード
+- **Add NBoard Protocol to §14 Reference**: a related Othello engine
+  communication protocol. Citing it as another reference example would make
+  the design rationale more convincing for CPU implementers.
+- **Note Thor notation compatibility in §8**: stating that the `f5` part of
+  `MOf5` matches the coordinate notation of the Thor games database (WOF
+  official) would help with replay/analysis interop.
+- **Add "automatic opening-name detection" to [open-issues](検討事項.md)**:
+  whether to include this in scope. The likely conclusion is "PC-side
+  feature" (the CPU does not need to know opening names), but explicitly
+  mentioning it once avoids re-litigating the design later.
+- **Add "time control is out of scope" to §9**: WOF official rules include
+  e.g. 30-min sudden-death and Fischer increment, but this document only
+  defines per-move timeout; whole-game time management is a PC-side / rules-
+  layer concern.
+- **Add "Thor-format game export" to [open-issues](検討事項.md)**: whether
+  this protocol's results should be converted to Thor format and stored on
+  the PC. Where to draw the line between CPU and PC.
+- **★ Stronger NBoard Protocol compatibility** (details in [NBoard互換性検討.md](NBoard互換性検討.md))
+  - ✅ **Already reflected**: `ST<text>\r\n` (STATUS), `NC<nodes>,<ms>\r\n`
+    (NODESTATS), the `p<N>` protocol-version suffix in the `VE` reply (all
+    optional CPU-side features)
+  - Not yet (medium-to-high cost): `SD<n>` (search depth), `HI<n>`
+    (candidate-move query), `BH` (Thor-format history transfer), GGF
+    compatibility mode
