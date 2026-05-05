@@ -1,4 +1,4 @@
-@startuml 59-state-external-cpu
+@startuml
 title 外部CPU UART プロトコル CPU 側 状態遷移図（例）
 
 skinparam state {
@@ -42,13 +42,13 @@ state "C3: WAIT_OPP" as WaitOpp <<play>> {
 ' === 共通応答（副作用なし・自己遷移） ===
 note as N1
   **共通応答**
-  "PI" → "PO"（BOOT 以外の全状態で有効）
-  "VE" → "VE<NN><名前>"（C1 以降で有効）
+  "PI" → "+PI"（BOOT 以外の全状態で有効）
+  "VE" → "+VE<NN><名前>"（C1 以降で有効）
 end note
 
 ' PI は BOOT を除く全状態で自己遷移（煩雑さ回避のため C1 のみ図示、C2/C3 も同様）
-Idle    -left->  Idle    : P1: 受信 "PI"\n→ 送信 "PO"
-Idle    -right-> Idle    : V1: 受信 "VE"\n→ 送信 "VE<NN><名前>"
+Idle    -left->  Idle    : P1: 受信 "PI"\n→ 送信 "+PI"
+Idle    -right-> Idle    : V1: 受信 "VE"\n→ 送信 "+VE<NN><名前>"
 
 ' === 遷移 ===
 

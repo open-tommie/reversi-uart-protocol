@@ -1,0 +1,47 @@
+@startuml
+title Normal flow (connect -> match -> game over)
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam ParticipantPadding 40
+
+participant "PC\n(host side)" as S
+participant "CPU\n(custom)" as C
+
+== Boot / liveness check ==
+S -> C : PI
+note right : PING (periodic;\nboot and liveness check)
+C -> S : +PI
+note left : PI success response\n(immediate)
+
+== Version query ==
+S -> C : VE
+C -> S : +VE02MyCPU-v1
+note left : 2-digit protocol version\n(currently 02 only) + name\n(ASCII, up to 16 chars)
+
+== Match start (CPU = black, first) ==
+S -> C : SB
+note right : START BLACK\nrequest the opening move
+C -> S : MOf5
+note left : CPU plays f5\n(typical black opening;\nstart of Tiger opening)
+
+== Match loop ==
+S -> C : MOd6
+note right : opponent's move\n(white reply in Tiger opening)
+C -> S : MOc3
+note left : CPU plays c3\n(Tiger opening, black 3rd)
+... alternating per turn ...
+
+== Heartbeat (also during the match) ==
+S -> C : PI
+C -> S : +PI
+
+... ...
+
+== Game over ==
+C -> S : EN
+note left : CPU resigns\n(opponent wins)
+' or
+' S -> C : EB/EW/ED : PC-determined game-over notice
+
+@enduml

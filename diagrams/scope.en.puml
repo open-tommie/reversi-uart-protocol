@@ -1,0 +1,40 @@
+@startuml
+title Scope of this document (the UART protocol specification)
+
+skinparam shadowing false
+skinparam rankdir TB
+skinparam ArrowColor black
+
+skinparam rectangle {
+    BackgroundColor<<PC>> #F5F5F5
+    BackgroundColor<<scope>> #FFCDD2
+    BorderColor<<scope>> #C62828
+    BorderThickness<<scope>> 2
+    BackgroundColor<<phy>> #F5F5F5
+    BackgroundColor<<cpu>> #F5F5F5
+    BackgroundColor<<out>> #E0E0E0
+}
+
+rectangle "PC side (out of scope, free implementation)" as server <<PC>> {
+  rectangle "Serial I/O" as srv_ser <<out>>
+}
+
+rectangle "Specified by this document\nUART protocol" as scope <<scope>> {
+  rectangle "Application layer\n(message format: SB/SW/MOd?/PA/BO.../EB/EW/ED/VE/PI\nCRLF line ending)" as app
+  rectangle "Link layer\n(baud rate / 8N1 / no flow control)" as link
+}
+
+rectangle "Physical layer (out of scope, CPU implementer's domain)" as phy <<phy>> {
+  rectangle "USB-UART converter (CP210x / CH340 / FTDI etc.)" as usb <<out>>
+  rectangle "Voltage levels, cables, connectors" as wire <<out>>
+}
+
+rectangle "CPU side (out of scope, free implementation)" as cpu <<cpu>> {
+  rectangle "Custom CPU\n(FPGA / MCU / discrete / etc.)" as mycpu <<out>>
+}
+
+server -down-> scope
+scope -down-> phy
+phy -down-> cpu
+
+@enduml

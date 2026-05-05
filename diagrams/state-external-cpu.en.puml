@@ -1,0 +1,78 @@
+@startuml
+title External CPU UART protocol - CPU-side state diagram (example)
+
+skinparam state {
+    BackgroundColor<<boot>> #E8F5E9
+    BackgroundColor<<idle>> #E3F2FD
+    BackgroundColor<<play>> #FFF3E0
+}
+
+' === State definitions ===
+' Receive = PC -> CPU, Send = CPU -> PC
+' Message format: see README.md / README.ja.md "Message Formats"
+' Base policy: purely reactive (respond to received messages).
+'              The only unsolicited send is "RE" right after BOOT (re-send request).
+
+state "C0: BOOT" as Boot <<boot>> {
+    Boot : Right after power-on
+    Boot : Send: "RE" (recovery request from
+    Boot :   in-game reset; optional)
+    Boot : Move to C1 after init completes
+}
+
+state "C1: IDLE" as Idle <<idle>> {
+    Idle : Connected, no game in progress or post-game
+    Idle : Idle (wait for input)
+    Idle : Game-end type (EB/EW/ED) is
+    Idle :   kept as an internal variable if needed
+}
+
+state "C2: MY_TURN" as MyTurn <<play>> {
+    MyTurn : CPU's turn
+    MyTurn : Compute a move
+    MyTurn : Send: "MOd?" / "PA" (pass)
+    MyTurn :   / "EN" (resign), one of these
+}
+
+state "C3: WAIT_OPP" as WaitOpp <<play>> {
+    WaitOpp : Opponent's turn
+    WaitOpp : Idle (wait for input)
+}
+
+' === Common responses (no side effects, self-transition) ===
+note as N1
+  **Common responses**
+  "PI" -> "+PI" (valid in all states except BOOT)
+  "VE" -> "+VE<NN><name>" (valid from C1 onward)
+end note
+
+' PI self-transitions in all states except BOOT (only C1 is shown to avoid clutter)
+Idle    -left->  Idle    : P1: receive "PI"\n-> send "+PI"
+Idle    -right-> Idle    : V1: receive "VE"\n-> send "+VE<NN><name>"
+
+' === Transitions ===
+
+' --- Boot ---
+[*] --> Boot : U0: power on / reset
+Boot --> Idle : U1: after sending "RE"
+
+' --- Board sync (right after connect / on reset recovery) ---
+Idle --> Idle : I1: receive "BO..."\noverwrite internal board\n(then wait for SB/SW)
+
+' --- Match start ---
+Idle --> MyTurn : G1: receive "SB"\n(black/first; compute move immediately)
+Idle --> WaitOpp : G2: receive "SW"\n(white/second; wait for opponent)
+
+' --- Match loop ---
+MyTurn --> WaitOpp : M1: send "MOd?"\n(normal move)
+MyTurn --> WaitOpp : M2: send "PA"\n(no legal move; pass)
+MyTurn --> Idle   : M3: send "EN"\n(self-resign -> back to IDLE)
+
+WaitOpp --> MyTurn : W1: receive "MOd?"\n(opponent move -> CPU's turn)
+WaitOpp --> MyTurn : W2: receive "PA"\n(opponent pass -> CPU's turn)
+
+' --- Game over ---
+MyTurn  --> Idle : E1: receive "EB"/"EW"/"ED"\n(game-over before move -> IDLE)
+WaitOpp --> Idle : E2: receive "EB"/"EW"/"ED"\n(-> IDLE)
+
+@enduml

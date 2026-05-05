@@ -1,4 +1,4 @@
-@startuml 61-test-setup
+@startuml
 title 参考：自作 CPU 用のテスト環境構成例
 
 skinparam shadowing false

@@ -1,0 +1,40 @@
+@startuml
+title Recovery flow (in-game CPU reset)
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam ParticipantPadding 40
+
+participant "PC\n(host side)" as S
+participant "CPU\n(custom)" as C
+
+== During the match (just before CPU's turn) ==
+S -> C : MOd5
+note right : opponent's move\n(PC retains it as "the most recent instruction")
+... CPU computing move ...
+
+== Unexpected reset ==
+note over C #FFEBEE
+  Power glitch / watchdog /
+  manual reset, etc.
+  CPU enters BOOT state
+end note
+
+== Reboot, unsolicited send ==
+C -> S : RE
+note left : READY\nboot complete; re-send request
+
+== PC-side recovery ==
+note over S
+  Re-send the most recent instruction
+  (SB / MOd? / BO... etc.) to restore the position
+end note
+S -> C : MOd5
+note right : re-send the previous MOVE
+
+== Match resumes ==
+C -> S : MOd7
+note left : CPU's move (after recovery)
+... back to the normal loop ...
+
+@enduml

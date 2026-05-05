@@ -1,4 +1,4 @@
-@startuml 61-scope
+@startuml
 title 本書のスコープ（UART プロトコル仕様の適用範囲）
 
 skinparam shadowing false

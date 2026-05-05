@@ -1,4 +1,4 @@
-@startuml 61-flow-normal
+@startuml
 title 正常フロー（接続〜対局〜終局）
 
 skinparam shadowing false
@@ -11,13 +11,13 @@ participant "CPU\n(自作)" as C
 == 起動・生存確認 ==
 S -> C : PI
 note right : PING（定期送信・\n起動および生存確認）
-C -> S : PO
-note left : PONG（即応答）
+C -> S : +PI
+note left : PI 成功応答（即応答）
 
 == バージョン問い合わせ ==
 S -> C : VE
-C -> S : VE01MyCPU-v1
-note left : プロトコルバージョン 2 桁\n(現状は 01 のみ) + 識別名\n(ASCII 最大 16 文字)
+C -> S : +VE02MyCPU-v1
+note left : プロトコルバージョン 2 桁\n(現状は 02 のみ) + 識別名\n(ASCII 最大 16 文字)
 
 == 対局開始（CPU = 黒・先攻）==
 S -> C : SB
@@ -34,7 +34,7 @@ note left : CPU 着手 c3\n(虎定石・黒 3 手目)
 
 == Heartbeat（対局中も定期的に）==
 S -> C : PI
-C -> S : PO
+C -> S : +PI
 
 ... ...
 

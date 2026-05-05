@@ -1,0 +1,45 @@
+@startuml
+title Coordinate system and BO string mapping (initial position)
+
+skinparam shadowing false
+skinparam noteBackgroundColor #FFFDE7
+skinparam noteBorderColor #F9A825
+
+note as Board
+  **Board (8 x 8)** WOF notation
+  Columns: a-h (left -> right) / Rows: 1-8 (top -> bottom; a1 = upper-left)
+  Cell value: **0** = empty / **1** = black / **2** = white
+
+  |   |= a |= b |= c |= d |= e |= f |= g |= h |
+  | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+  | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+  | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+  | 4 | 0 | 0 | 0 | **2** | **1** | 0 | 0 | 0 |
+  | 5 | 0 | 0 | 0 | **1** | **2** | 0 | 0 | 0 |
+  | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+  | 7 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+  | 8 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+  Initial position: d4=W(2), e4=B(1), d5=B(1), e5=W(2)
+end note
+
+note as BO
+  **BO string (64 chars, row-major)**
+  Concatenate row 1 (a1..h1) -> row 2 (a2..h2) -> ... -> row 8 (a8..h8).
+
+  row 1: ""00000000""
+  row 2: ""00000000""
+  row 3: ""00000000""
+  row 4: ""000<b>21</b>000""  <- d4=2, e4=1
+  row 5: ""000<b>12</b>000""  <- d5=1, e5=2
+  row 6: ""00000000""
+  row 7: ""00000000""
+  row 8: ""00000000""
+
+  Wire example (leading ""BO"" + 64 chars + ""\r\n""):
+  ""BO0000000000000000000000000002100000012000000000000000000000000000\r\n""
+end note
+
+Board -down-> BO : concatenate row-major
+
+@enduml

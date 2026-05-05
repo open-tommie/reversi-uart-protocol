@@ -1,4 +1,4 @@
-@startuml 61-flow-recovery
+@startuml
 title 異常系・復帰フロー（対局中の CPU リセット）
 
 skinparam shadowing false

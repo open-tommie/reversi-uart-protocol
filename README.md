@@ -63,9 +63,9 @@ feedback are welcome.
 This document defines only the **byte stream flowing on UART** (the application
 protocol above the link layer).
 
-![Scope of this document](scope.png)
+![Scope of this document](diagrams/scope.en.png)
 
-PlantUML source: [scope.puml](scope.puml)
+PlantUML source: [diagrams/scope.en.puml](diagrams/scope.en.puml)
 
 | Layer | Specified | Notes |
 | ----- | --------- | ----- |
@@ -83,9 +83,9 @@ physical level.
 CPU implementers may set up their own test environment. A typical configuration
 is shown below.
 
-![Test setup example](test-setup.png)
+![Test setup example](diagrams/test-setup.en.png)
 
-PlantUML source: [test-setup.puml](test-setup.puml)
+PlantUML source: [diagrams/test-setup.en.puml](diagrams/test-setup.en.puml)
 
 - Wire CPU → USB-UART converter → PC USB port as the physical chain
 - Use a serial terminal on the PC (VSCode Serial Monitor / TeraTerm / minicom)
@@ -107,8 +107,8 @@ PlantUML source: [test-setup.puml](test-setup.puml)
 - **Line ending is CR+LF (`\r\n`, 0x0D 0x0A) only**. Both directions strictly
   use CR+LF. LF alone or CR alone is not allowed.
 - **Commands are 2-character uppercase only**. Keywords like `SB`, `SW`, `MO`,
-  `PA`, `BO`, `EB`, `EW`, `ED`, `VE`, `PI`, `EN`, `RE`, `RS`, `BS`, `ST`, `NC`
-  are all 2 uppercase letters. Lowercase (e.g. `pi`) is a spec violation.
+  `PA`, `BO`, `EB`, `EW`, `ED`, `VE`, `PI`, `CA`, `EN`, `RE`, `RS`, `BS`, `ST`,
+  `NC` are all 2 uppercase letters. Lowercase (e.g. `pi`) is a spec violation.
 - **Response prefix**: the first character of a line distinguishes
   "self-initiated notification vs response" and "success vs error". The 1-char
   scheme is inspired by POP3 (RFC 1939) `+OK` / `-ERR`.
@@ -123,6 +123,17 @@ PlantUML source: [test-setup.puml](test-setup.puml)
   implementers. Future official RUP commands will only use `A`–`W` as the
   first letter. PC parsers conforming to RUP must treat `X*` / `+X*` / `-X*`
   as out-of-spec-but-allowed (log only; do not return `-`).
+  - **Recommended slots (convention)**: the following are recommended
+    assignments by community convention. They are not enforced by RUP, but
+    aligning the same mnemonic across CPUs lets PC-side tooling stay generic.
+
+    | Slot | Recommended use | Example |
+    | ---- | --------------- | ------- |
+    | `XI` | Device identification | `+XI pf=rp2350 chip=B2 ram=520KB` |
+    | `XB` | Benchmark | `+XB clk=1.795MHz tick=557ns` |
+    | `XS` | Set search depth (NBoard `SD` equivalent) | `XS5\r\n` → `+XS\r\n` |
+    | `XH` | Hint / candidate moves (NBoard `HI` equivalent) | `XH3\r\n` → `+XH d3,c4,e3\r\n` |
+
 - **Coordinates such as the `MO` argument are lowercase only** (per Othello
   notational convention: `MOd3` is OK, `MOD3` is not)
   - Column index = `ch - 'a'`, row index = `ch - '1'`
@@ -133,13 +144,20 @@ On receiving a violation (lowercase command, wrong line ending, unknown
 command, etc.), both host and CPU **respond with `-<NN>\r\n` or
 `-<NN> <reason>\r\n`**. `<NN>` is a 2-digit code (see §7.3; use `00` Generic
 when the cause cannot be identified). The sender just logs the failure per
-§7.2 #13 and does **not** auto-retry (to avoid infinite loops).
+§7.2 #14 and does **not** auto-retry (to avoid infinite loops).
 
 Minimum FPGA implementation: returning `-00\r\n` for every violation is
 spec-compliant.
 
 `X*` (extension namespace) is **not** treated as a violation. PC parsers log
 it and do not respond with `-`.
+
+**Empty-line handling**: a bare `\r\n` containing no command bytes (an empty
+line) is **not** a violation; it is **silently discarded**. This allows users
+to press Enter accidentally on a serial terminal, or send a stray `\r\n` to
+clear the line buffer, without triggering an error response. Both host and
+CPU just reset their parser and wait for the next line — neither side returns
+`-NN`.
 
 ## 6. Buffers and Timeouts
 
@@ -171,7 +189,8 @@ response from the CPU; notifications make a response optional.
 | 8 | `ED\r\n` | ✔ | END DRAW | notify | Game over, draw |
 | 9 | `VE\r\n` | ✔ | VERSION | query | Version query. The CPU responds with `+VE<NN>[<name>]\r\n` (see §7.2 #10). |
 | 10 | `PI\r\n` | ✔ | PING | query | Ping. The CPU responds with `+PI\r\n` (see §7.2 #9). |
-| 11 | `X*[<args>]\r\n` | | EXTENSION | query | A CPU-implementer-defined extension query. The CPU responds with `+X*[<data>]\r\n` or `-<NN>[ <reason>]\r\n`. Example: `XB\r\n` (extension benchmark request). |
+| 11 | `CA\r\n` | | CAPABILITY | query | Capability query. The CPU responds with `+CA <space-separated mnemonics>\r\n` listing every supported receivable command (required, optional, and `X*` extensions; see §7.2 #11). **Machine-readable capability list, not human-readable help text**. Equivalent to POP3 (RFC 1939) `CAPA` / IMAP `CAPABILITY`. Optional implementation. |
+| 12 | `X*[<args>]\r\n` | | EXTENSION | query | A CPU-implementer-defined extension query. The CPU responds with `+X*[<data>]\r\n` or `-<NN>[ <reason>]\r\n`. Example: `XB\r\n` (extension benchmark request). |
 
 **Response policy for notifications**: responses to notifications
 (`SB`–`ED`) are optional. The CPU may return `+SB\r\n` etc. as ack, but the
@@ -210,14 +229,15 @@ Required for queries from the PC; optional for notifications.
 | - | ------ | -------- | ---------- | ------- |
 | 9 | `+PI\r\n` | ✔ | `PI\r\n` | Success response to PI (replaces v0.1 `PO`). |
 | 10 | `+VE<NN>[<name>]\r\n` | ✔ | `VE\r\n` | Success response to VE. `<NN>` is **fixed 2-digit ASCII protocol version** (`00`-`99`, leading zero required, `+VE1xxx` is invalid). `<name>` is an identifier (ASCII printable 0x20-0x7E, 0-16 chars; **omittable** — minimum FPGA implementations may send `+VE02\r\n`). For now only `02` (Draft v0.2) is supported. Examples: `+VE02\r\n` / `+VE02MyCPU-v1\r\n` |
-| 11 | `+X*[<data>]\r\n` | | `X*\r\n` | Success response to an extension query. Example: `+XB clk=1.795MHz tick=557ns\r\n` |
-| 12 | `+<CMD>\r\n` | | (any notification) | Optional ack to a notification. Example: `+SB\r\n`. The PC silently discards it. |
+| 11 | `+CA <space-separated mnemonics>\r\n` | ✔ | `CA\r\n` | Success response to CA. Lists every receivable command the CPU supports (required, optional, and `X*` extensions; order is implementation-defined). `+CA` itself is included. Example: `+CA PI VE CA SB SW MO PA BO EB EW ED XI XB\r\n`. Each token is `[A-Z]{2}` by default; future versions may add a `MNEMONIC:<metadata>` form, so parsers MUST ignore unknown tokens containing `:`. The response line is expected to fit in 256 bytes. |
+| 12 | `+X*[<data>]\r\n` | | `X*\r\n` | Success response to an extension query. Example: `+XB clk=1.795MHz tick=557ns\r\n` |
+| 13 | `+<CMD>\r\n` | | (any notification) | Optional ack to a notification. Example: `+SB\r\n`. The PC silently discards it. |
 
 #### 7.2.C Error responses (`-` prefix; sent on spec violation)
 
 | # | Format | Required | Meaning |
 | - | ------ | -------- | ------- |
-| 13 | `-<NN>[ <reason>]\r\n` | | Response to a spec violation. `<NN>` is **fixed 2-digit ASCII code** (`00`-`99`, see §7.3). `<reason>` is an optional ASCII printable string (max 64 chars, leading-space delimited, for debugging). Minimum FPGA implementation: just `-00\r\n` (5 bytes). The receiver only logs per §5.1; no auto-retry. |
+| 14 | `-<NN>[ <reason>]\r\n` | | Response to a spec violation. `<NN>` is **fixed 2-digit ASCII code** (`00`-`99`, see §7.3). `<reason>` is an optional ASCII printable string (max 64 chars, leading-space delimited, for debugging). Minimum FPGA implementation: just `-00\r\n` (5 bytes). The receiver only logs per §5.1; no auto-retry. |
 
 Examples:
 
@@ -271,9 +291,9 @@ The CPU's internal board representation (`row*8+col`, `col*8+row`, bitboard,
 etc.) is **up to the implementer**. This document only defines the wire
 serialization order.
 
-![Coordinate system and BO string mapping](board-coord.png)
+![Coordinate system and BO string mapping](diagrams/board-coord.en.png)
 
-PlantUML source: [board-coord.puml](board-coord.puml)
+PlantUML source: [diagrams/board-coord.en.puml](diagrams/board-coord.en.puml)
 
 ## 9. Protocol Design Guidelines
 
@@ -328,9 +348,9 @@ Legend:
 CPU replies with `+PI`, so the design does not depend on serial-link timing
 or CPU boot order (the CPU side can be implemented purely reactively).
 
-![Normal flow sequence diagram](flow-normal.png)
+![Normal flow sequence diagram](diagrams/flow-normal.en.png)
 
-PlantUML source: [flow-normal.puml](flow-normal.puml)
+PlantUML source: [diagrams/flow-normal.en.puml](diagrams/flow-normal.en.puml)
 
 ## 11. CPU-side State Diagram (example)
 
@@ -339,9 +359,9 @@ protocol semantics (message format, timing) defined here are met, the CPU's
 internal state representation is up to the implementer.
 
 <!-- markdownlint-disable-next-line MD033 -->
-<img src="state-external-cpu.png" alt="CPU-side state diagram (example)" width="1000" />
+<img src="diagrams/state-external-cpu.en.png" alt="CPU-side state diagram (example)" width="1000" />
 
-PlantUML source: [state-external-cpu.puml](state-external-cpu.puml)
+PlantUML source: [diagrams/state-external-cpu.en.puml](diagrams/state-external-cpu.en.puml)
 
 The base behavior is purely reactive (respond to received messages). The only
 unsolicited send is `RE\r\n` right after BOOT (recovery request from in-game
@@ -396,12 +416,12 @@ messages received from the PC, and each cell is "action / next state".
 Implementers can read off "given event X in state Y, do Z and go to state W"
 at a glance.
 
-| state＼event | `PI` | `VE` | `X*` | `SB` | `SW` | `MOd?` | `PA` | `BO...` | `EB`/`EW`/`ED` |
-| ------------ | ---- | ---- | ---- | ---- | ---- | ------ | ---- | ------- | --------------- |
-| C0: BOOT | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ |
-| C1: IDLE | send `+PI` | send `+VE name` | send `+X*` or `-NN` | →C2 | →C3 | — | — | overwrite board | — |
-| C2: MY_TURN² | send `+PI` | send `+VE name` | send `+X*` or `-NN` | ※ | ※ | — | ※ | — | →C1 |
-| C3: WAIT_OPP | send `+PI` | send `+VE name` | send `+X*` or `-NN` | ※ | ※ | update board / →C2 | →C2 | — | →C1 |
+| state＼event | `PI` | `VE` | `CA` | `X*` | `SB` | `SW` | `MOd?` | `PA` | `BO...` | `EB`/`EW`/`ED` |
+| ------------ | ---- | ---- | ---- | ---- | ---- | ---- | ------ | ---- | ------- | --------------- |
+| C0: BOOT | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ | —¹ |
+| C1: IDLE | send `+PI` | send `+VE name` | send `+CA list`³ | send `+X*` or `-NN` | →C2 | →C3 | — | — | overwrite board | — |
+| C2: MY_TURN² | send `+PI` | send `+VE name` | send `+CA list`³ | send `+X*` or `-NN` | ※ | ※ | — | ※ | — | →C1 |
+| C3: WAIT_OPP | send `+PI` | send `+VE name` | send `+CA list`³ | send `+X*` or `-NN` | ※ | ※ | update board / →C2 | →C2 | — | →C1 |
 
 **Legend**:
 
@@ -419,6 +439,8 @@ at a glance.
   CPU spontaneously sends `MOd?\r\n` / `PA\r\n` / `EN\r\n` and transitions to
   C3 / C3 / C1 respectively (a self-transition by the CPU, not driven by an
   incoming event).
+- ³ `CA` is optional. CPUs that don't implement it may return `-01` (Unknown
+  command).
 - Side assignment by `SB`/`SW` at game start: receiving `SB` makes the CPU
   black (first) and transitions to C2 (MY_TURN); receiving `SW` makes it white
   (second) and transitions to C3 (WAIT_OPP).
@@ -437,9 +459,9 @@ after boot. The host detects `RE` and **re-sends the most recent instruction
   ...
 ```
 
-![Recovery flow sequence diagram](flow-recovery.png)
+![Recovery flow sequence diagram](diagrams/flow-recovery.en.png)
 
-PlantUML source: [flow-recovery.puml](flow-recovery.puml)
+PlantUML source: [diagrams/flow-recovery.en.puml](diagrams/flow-recovery.en.puml)
 
 ### 13.1 Recovery from Board Divergence (`RS`)
 

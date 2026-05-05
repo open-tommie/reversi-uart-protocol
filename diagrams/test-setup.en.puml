@@ -1,0 +1,48 @@
+@startuml
+title Reference: typical test setup for a custom CPU
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+hide <<plain>> stereotype
+
+skinparam rectangle {
+    BackgroundColor<<cpu>> #FFF3E0
+    BorderColor<<cpu>> #E65100
+    BackgroundColor<<bridge>> #FFEBEE
+    BorderColor<<bridge>> #C62828
+    BackgroundColor<<pc>> #E3F2FD
+    BorderColor<<pc>> #1565C0
+    BackgroundColor<<tool>> #F1F8E9
+    BorderColor<<tool>> #558B2F
+    BackgroundColor<<plain>> transparent
+    BorderColor<<plain>> transparent
+    Shadowing<<plain>> false
+}
+
+rectangle "Custom CPU\n(FPGA / MCU / discrete / etc.)" as cpu <<cpu>>
+
+rectangle "USB-UART converter\n(CP210x / CH340 / FTDI etc.)" as bridge <<bridge>>
+
+rectangle "PC (Windows / Mac / Linux)" as pc <<pc>> {
+  rectangle "Serial terminal\n(VSCode Serial Monitor /\n TeraTerm / minicom)" as term <<tool>>
+  rectangle "Serial-IO\nmatch program" as pyser <<tool>>
+}
+
+cpu -right-> bridge : UART
+bridge -right-> pc : USB
+
+rectangle "<latex>\phantom{XXXXXXXXXXXXXXXXXX}\underbrace{\phantom{XXXXXXXXXXXXXXXXXXXXXXXXX}}_{\textcolor{red}{\textbf{\Large UART protocol specified by this document}}}</latex>" as proto <<plain>>
+bridge -[hidden]down- proto
+
+note bottom of term
+  Hand-type "SB", "MOd3", "PI" etc.
+  to verify the CPU's response
+end note
+
+note bottom of pyser
+  Auto-send/receive each line of the spec
+  to replay match sequences and
+  verify the CPU implementation
+end note
+
+@enduml
