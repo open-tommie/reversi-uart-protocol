@@ -2,7 +2,7 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-2026-05-02
+2026-05-05
 
 Author: [tommie.jp](https://tommie.jp) ([@tommie-jp](https://github.com/tommie-jp))
 
