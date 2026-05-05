@@ -1,0 +1,12 @@
+# Claude Code (local-only settings)
+.claude/settings.local.json
+
+# Local-only memos (not part of the spec)
+*-ignore.md
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.bak
